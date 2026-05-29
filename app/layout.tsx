@@ -63,7 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-gray-100 text-gray-900 antialiased">
         <div className="flex h-screen overflow-hidden">
           {/* Desktop sidebar */}
-          <aside className="hidden md:flex md:flex-shrink-0 md:w-64">
+          <aside className="hidden md:flex md:flex-shrink-0 md:w-64 print:hidden">
             <div className="w-64 flex flex-col">
               <Sidebar />
             </div>
@@ -71,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           {/* Mobile sidebar overlay */}
           {sidebarOpen && (
-            <div className="fixed inset-0 z-40 md:hidden">
+            <div className="fixed inset-0 z-40 md:hidden print:hidden">
               <div
                 className="absolute inset-0 bg-gray-600 bg-opacity-75"
                 onClick={() => setSidebarOpen(false)}
@@ -85,7 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Main content */}
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Mobile top bar */}
-            <div className="md:hidden flex items-center justify-between bg-gray-900 px-4 py-3">
+            <div className="md:hidden print:hidden flex items-center justify-between bg-gray-900 px-4 py-3">
               <span className="text-lg font-bold text-indigo-400">ComptaAsso</span>
               <button
                 onClick={() => setSidebarOpen(true)}

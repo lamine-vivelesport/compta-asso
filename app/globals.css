@@ -5,36 +5,31 @@ body {
 }
 
 @media print {
-  /* Masquer la navigation et tout ce qui n'est pas le document */
-  aside, nav, header, .print\:hidden { display: none !important; }
+  /* Masquer toute la navigation */
+  aside, nav, header { display: none !important; }
+  [class*="print:hidden"] { display: none !important; }
 
-  /* Pleine page, fond blanc */
-  body, html { background: white !important; }
+  /* Fond blanc, pleine largeur */
+  body, html { background: white !important; font-size: 10pt; }
   main { padding: 0 !important; overflow: visible !important; }
+  .flex.h-screen { display: block !important; height: auto !important; }
+  .flex-1.overflow-hidden { overflow: visible !important; }
+  .overflow-y-auto { overflow: visible !important; }
 
-  /* Le document imprimable prend toute la page */
-  .print-document {
-    display: block !important;
-    width: 100%;
-    color: black;
-    font-size: 11pt;
-  }
-
-  /* Tableau bilan en colonnes côte à côte */
+  /* Bilan en 2 colonnes */
   .bilan-grid {
     display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
   }
 
-  /* Éviter les coupures de page dans les tableaux */
-  table { break-inside: avoid; }
-  tr { break-inside: avoid; }
+  /* Couleurs forcées */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  /* Forcer les couleurs sombres à l'impression */
-  .bg-blue-700, .bg-purple-700 {
-    background-color: #1e3a5f !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+  /* Éviter les coupures */
+  .print-document { page-break-inside: avoid; }
+  div { break-inside: avoid; }
+
+  /* Marges de page */
+  @page { margin: 1.5cm; size: A4; }
 }
