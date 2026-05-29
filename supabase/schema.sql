@@ -16,4 +16,10 @@ create index if not exists ecritures_compte_debit_idx on ecritures(compte_debit)
 create index if not exists ecritures_compte_credit_idx on ecritures(compte_credit);
 
 alter table ecritures enable row level security;
-create policy "Allow all" on ecritures for all using (true) with check (true);
+
+drop policy if exists "Allow all" on ecritures;
+create policy "Allow all"
+  on ecritures for all
+  to anon, authenticated
+  using (true)
+  with check (true);

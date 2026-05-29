@@ -205,8 +205,9 @@ export default function ImportPage() {
       })).filter(r => !isNaN(r.montant) && r.montant > 0)
       const { error } = await supabase.from('ecritures').insert(batch)
       if (error) {
-        console.error('Supabase CSV error:', error)
-        showToast('error', `Erreur: ${error.message} (code: ${error.code})`)
+        const detail = error.message || error.details || error.hint || JSON.stringify(error)
+        console.error('Supabase CSV error:', JSON.stringify(error))
+        showToast('error', `Erreur Supabase [${error.code ?? '?'}]: ${detail}`)
         errors += batch.length
       } else {
         success += batch.length
