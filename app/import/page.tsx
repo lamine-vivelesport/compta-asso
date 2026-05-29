@@ -23,6 +23,13 @@ const FIELD_LABELS: Record<EcritureField, string> = {
   libelle: 'Libellé', compte_debit: 'Compte Débit', compte_credit: 'Compte Crédit', montant: 'Montant',
 }
 
+function normalizeDate(d: string): string {
+  // DD/MM/YYYY → YYYY-MM-DD
+  const m = d.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return d // already ISO or unknown format, leave as-is
+}
+
 function parseCsv(text: string): { headers: string[]; rows: CsvRow[] } {
   const lines = text.trim().split(/\r?\n/)
   if (lines.length < 2) return { headers: [], rows: [] }
@@ -190,13 +197,20 @@ export default function ImportPage() {
     const BATCH = 50
     for (let i = 0; i < valid.length; i += BATCH) {
       const batch = valid.slice(i, i + BATCH).map(r => ({
-        date: r.date, numero_piece: r.numero_piece || '',
+        date: normalizeDate(r.date),
+        numero_piece: r.numero_piece || '',
         journal_code: ['AC', 'VE', 'BQ', 'CA', 'OD'].includes(r.journal_code) ? r.journal_code : 'OD',
         libelle: r.libelle, compte_debit: r.compte_debit, compte_credit: r.compte_credit,
         montant: parseFloat(r.montant.replace(',', '.')),
       })).filter(r => !isNaN(r.montant) && r.montant > 0)
       const { error } = await supabase.from('ecritures').insert(batch)
-      if (error) errors += batch.length; else success += batch.length
+      if (error) {
+        console.error('Supabase CSV error:', error)
+        showToast('error', `Erreur: ${error.message} (code: ${error.code})`)
+        errors += batch.length
+      } else {
+        success += batch.length
+      }
       setProgress(Math.round(((i + BATCH) / valid.length) * 100))
     }
     setImporting(false); setResult({ success, errors })
