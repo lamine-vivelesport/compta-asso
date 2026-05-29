@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { supabase } from '@/lib/supabase'
 import { JOURNAL_LABELS } from '@/types/index'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
