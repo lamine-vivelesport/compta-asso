@@ -76,6 +76,9 @@ export default function ImportPage() {
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<{ success: number; errors: number } | null>(null)
   const [pasteText, setPasteText] = useState('')
+  const [duplicates, setDuplicates] = useState<MappedRow[]>([])
+  const [pendingRows, setPendingRows] = useState<MappedRow[]>([])
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -111,15 +114,13 @@ export default function ImportPage() {
       montant: mapping.montant ? row[mapping.montant] : '',
     }))
 
-  const handleImport = async () => {
-    const mapped = getMappedRows()
-    const valid = mapped.filter(r => r.date && r.libelle && r.compte_debit && r.compte_credit && r.montant)
-    if (valid.length === 0) { showToast('error', 'Aucune ligne valide. Vérifiez le mapping.'); return }
+  const doInsert = async (rows: MappedRow[]) => {
+    setAwaitingConfirm(false)
     setImporting(true); setProgress(0)
     let success = 0; let errors = 0
     const BATCH = 50
-    for (let i = 0; i < valid.length; i += BATCH) {
-      const batch = valid.slice(i, i + BATCH).map(r => ({
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH).map(r => ({
         date: normalizeDate(r.date),
         numero_piece: r.numero_piece || '',
         journal_code: ['AC', 'VE', 'BQ', 'CA', 'OD'].includes(r.journal_code) ? r.journal_code : 'OD',
@@ -136,12 +137,47 @@ export default function ImportPage() {
       } else {
         success += batch.length
       }
-      setProgress(Math.round(((i + BATCH) / valid.length) * 100))
+      setProgress(Math.round(((i + BATCH) / rows.length) * 100))
     }
     setImporting(false); setResult({ success, errors })
     if (errors === 0) {
       showToast('success', `${success} écriture(s) importée(s). Redirection…`)
       setTimeout(() => router.push('/journal'), 1500)
+    }
+  }
+
+  const handleImport = async () => {
+    const mapped = getMappedRows()
+    const valid = mapped.filter(r => r.date && r.libelle && r.compte_debit && r.compte_credit && r.montant)
+    if (valid.length === 0) { showToast('error', 'Aucune ligne valide. Vérifiez le mapping.'); return }
+
+    // Vérification des doublons
+    setImporting(true)
+    const dates = valid.map(r => normalizeDate(r.date)).sort()
+    const { data: existing } = await supabase
+      .from('ecritures')
+      .select('date, numero_piece, libelle, montant')
+      .gte('date', dates[0])
+      .lte('date', dates[dates.length - 1])
+    setImporting(false)
+
+    const found = valid.filter(row =>
+      existing?.some(e => {
+        const isoDate = normalizeDate(row.date)
+        if (row.numero_piece && e.numero_piece)
+          return e.date === isoDate && e.numero_piece === row.numero_piece
+        return e.date === isoDate &&
+          e.libelle === row.libelle &&
+          Math.abs(Number(e.montant) - parseFloat(row.montant.replace(',', '.'))) < 0.01
+      })
+    )
+
+    if (found.length > 0) {
+      setDuplicates(found)
+      setPendingRows(valid)
+      setAwaitingConfirm(true)
+    } else {
+      await doInsert(valid)
     }
   }
 
@@ -268,6 +304,59 @@ export default function ImportPage() {
               </table>
             </div>
           </div>
+
+          {/* Alerte doublons — confirmation requise */}
+          {awaitingConfirm && (
+            <div className="mb-4 p-4 rounded-xl border-2 border-orange-400 bg-orange-50">
+              <p className="font-bold text-orange-800 mb-2">
+                ⚠️ {duplicates.length} doublon(s) détecté(s) — veuillez vérifier avant de continuer
+              </p>
+              <div className="overflow-x-auto mb-4">
+                <table className="min-w-full text-xs bg-white rounded border border-orange-200">
+                  <thead>
+                    <tr className="bg-orange-100 text-left">
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                      <th className="px-3 py-2 font-semibold">N° Pièce</th>
+                      <th className="px-3 py-2 font-semibold">Libellé</th>
+                      <th className="px-3 py-2 font-semibold text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-100">
+                    {duplicates.map((r, i) => (
+                      <tr key={i}>
+                        <td className="px-3 py-1.5 text-gray-600">{r.date}</td>
+                        <td className="px-3 py-1.5 font-mono text-gray-500 text-xs">{r.numero_piece || '—'}</td>
+                        <td className="px-3 py-1.5 text-gray-800 max-w-[200px] truncate">{r.libelle}</td>
+                        <td className="px-3 py-1.5 text-right font-medium">{r.montant} €</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => doInsert(pendingRows.filter(r => !duplicates.some(d =>
+                    d.date === r.date && d.libelle === r.libelle && d.montant === r.montant
+                  )))}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                >
+                  Ignorer les doublons — importer les {pendingRows.length - duplicates.length} autre(s)
+                </button>
+                <button
+                  onClick={() => doInsert(pendingRows)}
+                  className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                >
+                  Importer tout quand même ({pendingRows.length})
+                </button>
+                <button
+                  onClick={() => { setAwaitingConfirm(false); setDuplicates([]); setPendingRows([]) }}
+                  className="text-sm text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
 
           {importing && (
             <div className="mb-4">
