@@ -75,6 +75,7 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<{ success: number; errors: number } | null>(null)
+  const [pasteText, setPasteText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -82,20 +83,22 @@ export default function ImportPage() {
     setTimeout(() => setToast(null), 5000)
   }
 
+  const loadText = useCallback((text: string) => {
+    const parsed = parseCsv(text)
+    if (parsed.headers.length === 0) { showToast('error', 'Aucune donnée valide détectée.'); return }
+    setHeaders(parsed.headers); setCsvRows(parsed.rows)
+    setMapping(guessMapping(parsed.headers)); setResult(null)
+  }, [])
+
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
       showToast('error', 'Veuillez sélectionner un fichier CSV.')
       return
     }
     const reader = new FileReader()
-    reader.onload = e => {
-      const text = e.target?.result as string
-      const parsed = parseCsv(text)
-      setHeaders(parsed.headers); setCsvRows(parsed.rows)
-      setMapping(guessMapping(parsed.headers)); setResult(null)
-    }
+    reader.onload = e => loadText(e.target?.result as string)
     reader.readAsText(file, 'UTF-8')
-  }, [])
+  }, [loadText])
 
   const getMappedRows = (): MappedRow[] =>
     csvRows.map(row => ({
@@ -180,6 +183,34 @@ export default function ImportPage() {
           ref={inputRef} type="file" accept=".csv,text/csv" className="hidden"
           onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
+      </div>
+
+      {/* Zone de collage direct */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+        <h2 className="font-semibold text-gray-700 mb-3">Ou collez vos lignes directement</h2>
+        <textarea
+          value={pasteText}
+          onChange={e => setPasteText(e.target.value)}
+          placeholder={'date;piece;journal;libelle;compte_debit;compte_credit;montant\n03/02/2025;REF001;BQ;Libellé opération;641000;512000;948.01\n...'}
+          rows={6}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+          spellCheck={false}
+        />
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => { if (pasteText.trim()) loadText(pasteText) }}
+            disabled={!pasteText.trim()}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Charger
+          </button>
+          <button
+            onClick={() => { setPasteText(''); setHeaders([]); setCsvRows([]); setResult(null) }}
+            className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-4 py-2 rounded-lg"
+          >
+            Effacer
+          </button>
+        </div>
       </div>
 
       {headers.length > 0 && (
