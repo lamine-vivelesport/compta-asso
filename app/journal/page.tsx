@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { JOURNAL_LABELS } from '@/types/index'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { parseYear, yearRange } from '@/lib/exercice'
+import YearSelector from '@/components/YearSelector'
 import Link from 'next/link'
 
 const PAGE_SIZE = 20
@@ -12,6 +15,7 @@ function fmt(n: number) {
 }
 
 interface SearchParams {
+  annee?: string
   journal?: string
   from?: string
   to?: string
@@ -24,9 +28,11 @@ export default async function JournalPage({
   searchParams: Promise<SearchParams>
 }) {
   const params = await searchParams
+  const year = parseYear(params.annee)
+  const { from: yearFrom, to: yearTo } = yearRange(year)
   const journalFilter = params.journal ?? ''
-  const fromDate = params.from ?? ''
-  const toDate = params.to ?? ''
+  const fromDate = params.from ?? yearFrom
+  const toDate = params.to ?? yearTo
   const page = Math.max(1, parseInt(params.page ?? '1', 10))
   const offset = (page - 1) * PAGE_SIZE
 
@@ -38,8 +44,7 @@ export default async function JournalPage({
     .range(offset, offset + PAGE_SIZE - 1)
 
   if (journalFilter) query = query.eq('journal_code', journalFilter)
-  if (fromDate) query = query.gte('date', fromDate)
-  if (toDate) query = query.lte('date', toDate)
+  query = query.gte('date', fromDate).lte('date', toDate)
 
   const { data, count, error } = await query
   const rows = data ?? []
@@ -47,6 +52,7 @@ export default async function JournalPage({
 
   const buildUrl = (overrides: Record<string, string>) => {
     const p = new URLSearchParams()
+    p.set('annee', String(year))
     if (journalFilter) p.set('journal', journalFilter)
     if (fromDate) p.set('from', fromDate)
     if (toDate) p.set('to', toDate)
@@ -59,9 +65,9 @@ export default async function JournalPage({
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Journal comptable</h1>
-        <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors">
-          Exporter CSV
-        </button>
+        <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
+          <YearSelector current={year} />
+        </Suspense>
       </div>
 
       {/* Filters */}

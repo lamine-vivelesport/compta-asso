@@ -1,16 +1,29 @@
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { parseYear, yearRange } from '@/lib/exercice'
+import YearSelector from '@/components/YearSelector'
 
 function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
 }
 
-export default async function ResultatPage() {
+export default async function ResultatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ annee?: string }>
+}) {
+  const params = await searchParams
+  const year = parseYear(params.annee)
+  const { from, to } = yearRange(year)
+
   const { data, error } = await supabase
     .from('ecritures')
     .select('compte_debit, compte_credit, montant')
+    .gte('date', from)
+    .lte('date', to)
 
   const rows = data ?? []
 
@@ -46,8 +59,15 @@ export default async function ResultatPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">Compte de résultat</h1>
-      <p className="text-sm text-gray-500 mb-6">Association Loi 1901 — Exercice en cours</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Compte de résultat</h1>
+          <p className="text-sm text-gray-500">Association Loi 1901 — Exercice {year}</p>
+        </div>
+        <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
+          <YearSelector current={year} />
+        </Suspense>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">

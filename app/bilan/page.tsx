@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
 import { ASSO } from '@/lib/config'
+import { parseYear, yearRange } from '@/lib/exercice'
+import YearSelector from '@/components/YearSelector'
 import ExportButton from './ExportButton'
 
 function fmt(n: number) {
@@ -49,10 +52,20 @@ function TotalBar({ label, value, color }: { label: string; value: number; color
   )
 }
 
-export default async function BilanPage() {
+export default async function BilanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ annee?: string }>
+}) {
+  const params = await searchParams
+  const year = parseYear(params.annee)
+  const { from, to } = yearRange(year)
+
   const { data, error } = await supabase
     .from('ecritures')
     .select('compte_debit, compte_credit, montant')
+    .gte('date', from)
+    .lte('date', to)
 
   const rows = data ?? []
   const dateGeneration = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -141,9 +154,14 @@ export default async function BilanPage() {
       <div className="flex items-center justify-between mb-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Bilan</h1>
-          <p className="text-sm text-gray-500">Exercice {ASSO.exerciceDebut} — {ASSO.exerciceFin}</p>
+          <p className="text-sm text-gray-500">Exercice {year}</p>
         </div>
-        <ExportButton />
+        <div className="flex items-center gap-3">
+          <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
+            <YearSelector current={year} />
+          </Suspense>
+          <ExportButton />
+        </div>
       </div>
 
       {error && (
@@ -173,7 +191,7 @@ export default async function BilanPage() {
           <div className="text-center mt-4">
             <div className="text-xl font-bold uppercase tracking-widest text-gray-900">BILAN</div>
             <div className="text-xs text-gray-500 mt-0.5">
-              Exercice du {ASSO.exerciceDebut} au {ASSO.exerciceFin} — Règlement CRC 99-01
+              Exercice du 01/01/{year} au 31/12/{year} — Règlement CRC 99-01
             </div>
           </div>
         </div>
@@ -316,7 +334,7 @@ export default async function BilanPage() {
         <div className="border-t border-gray-300 pt-4">
           <p className="text-xs text-gray-600 mb-5">
             Je soussigné(e) certifie que le présent bilan est exact et sincère et reflète fidèlement
-            la situation financière de l&apos;association au terme de l&apos;exercice {ASSO.exerciceDebut} – {ASSO.exerciceFin},
+            la situation financière de l&apos;association au terme de l&apos;exercice 01/01/{year} – 31/12/{year},
             établi conformément au règlement CRC 99-01 relatif aux associations et fondations.
           </p>
           <div className="grid grid-cols-2 gap-8">
