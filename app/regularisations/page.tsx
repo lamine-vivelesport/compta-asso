@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
-import { EXERCICES } from '@/lib/exercice'
+import { DEFAULT_EXERCICES } from '@/lib/exercice'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ export default function RegularisationsPage() {
     }
 
     setType(detectedType)
-    setYear(EXERCICES.includes(inferredYear) ? inferredYear : 2024)
+    setYear(inferredYear > 2000 ? inferredYear : new Date().getFullYear() - 1)
     setCompteReg(detectedCompteReg)
     setCompteTransitoire(detectedType ? CONFIGS[detectedType].compteTransitoireDefault : '')
     setMontant(montantParam)
@@ -381,7 +381,7 @@ export default function RegularisationsPage() {
                         <label className="block text-xs font-medium text-gray-600 mb-1">Exercice concerné (N)</label>
                         <select value={year} onChange={e => setYear(parseInt(e.target.value))}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                          {EXERCICES.filter(y => y < 2025).map(y => <option key={y} value={y}>{y}</option>)}
+                          {DEFAULT_EXERCICES.filter(y => y < new Date().getFullYear()).map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <p className="text-xs text-gray-400 mt-1">Écriture créée au 31/12/{year}</p>
                       </div>

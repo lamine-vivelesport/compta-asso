@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
 import { ASSO } from '@/lib/config'
-import { parseYear, yearRange } from '@/lib/exercice'
+import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 import ExportButton from './ExportButton'
 
@@ -60,6 +60,7 @@ export default async function BilanPage({
   const params = await searchParams
   const year = parseYear(params.annee)
   const { from, to } = yearRange(year)
+  const exercices = await getExercices()
 
   const { data, error } = await supabase
     .from('ecritures')
@@ -158,7 +159,7 @@ export default async function BilanPage({
         </div>
         <div className="flex items-center gap-3">
           <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
-            <YearSelector current={year} />
+            <YearSelector current={year} years={exercices} />
           </Suspense>
           <ExportButton />
         </div>

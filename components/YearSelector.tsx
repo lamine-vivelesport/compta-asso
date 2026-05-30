@@ -1,9 +1,13 @@
 'use client'
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { EXERCICES } from '@/lib/exercice'
 
-export default function YearSelector({ current }: { current: number }) {
+interface Props {
+  current: number
+  years: number[]
+}
+
+export default function YearSelector({ current, years }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -11,7 +15,6 @@ export default function YearSelector({ current }: { current: number }) {
   const onChange = (year: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('annee', year)
-    // Reset pagination when changing year
     params.delete('page')
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -24,7 +27,7 @@ export default function YearSelector({ current }: { current: number }) {
         onChange={e => onChange(e.target.value)}
         className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800"
       >
-        {EXERCICES.map(y => (
+        {years.map(y => (
           <option key={y} value={y}>{y}</option>
         ))}
       </select>

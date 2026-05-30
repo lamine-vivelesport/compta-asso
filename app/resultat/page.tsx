@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
-import { parseYear, yearRange } from '@/lib/exercice'
+import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 
 function fmt(n: number) {
@@ -18,6 +18,7 @@ export default async function ResultatPage({
   const params = await searchParams
   const year = parseYear(params.annee)
   const { from, to } = yearRange(year)
+  const exercices = await getExercices()
 
   const { data, error } = await supabase
     .from('ecritures')
@@ -65,7 +66,7 @@ export default async function ResultatPage({
           <p className="text-sm text-gray-500">Association Loi 1901 — Exercice {year}</p>
         </div>
         <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
-          <YearSelector current={year} />
+          <YearSelector current={year} years={exercices} />
         </Suspense>
       </div>
 

@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { JOURNAL_LABELS } from '@/types/index'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
-import { parseYear, yearRange } from '@/lib/exercice'
+import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 import Link from 'next/link'
 
@@ -30,6 +30,7 @@ export default async function JournalPage({
   const params = await searchParams
   const year = parseYear(params.annee)
   const { from: yearFrom, to: yearTo } = yearRange(year)
+  const exercices = await getExercices()
   const journalFilter = params.journal ?? ''
   const fromDate = params.from ?? yearFrom
   const toDate = params.to ?? yearTo
@@ -66,7 +67,7 @@ export default async function JournalPage({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Journal comptable</h1>
         <Suspense fallback={<div className="w-36 h-9 bg-gray-100 animate-pulse rounded-lg" />}>
-          <YearSelector current={year} />
+          <YearSelector current={year} years={exercices} />
         </Suspense>
       </div>
 
