@@ -51,6 +51,16 @@ export default async function JournalPage({
   const rows = data ?? []
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
+  // Document counts for visible rows
+  const rowIds = rows.map((e: Record<string, unknown>) => e.id as string)
+  const { data: docData } = rowIds.length > 0
+    ? await supabase.from('documents').select('ecriture_id').in('ecriture_id', rowIds)
+    : { data: [] }
+  const docCounts: Record<string, number> = {}
+  for (const d of (docData ?? [])) {
+    docCounts[d.ecriture_id] = (docCounts[d.ecriture_id] ?? 0) + 1
+  }
+
   const buildUrl = (overrides: Record<string, string>) => {
     const p = new URLSearchParams()
     p.set('annee', String(year))
@@ -180,14 +190,27 @@ export default async function JournalPage({
                       <span className="text-gray-400 ml-1">{getPcgLabel(e.compte_credit as string).slice(0, 25)}</span>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(Number(e.montant))}</td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/regularisations?${regParams.toString()}`}
-                        title="Régulariser cette écriture"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-700 text-sm"
-                      >
-                        🔄
-                      </Link>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/documents?annee=${year}&ecriture=${e.id as string}`}
+                          title={docCounts[e.id as string] ? `${docCounts[e.id as string]} pièce(s)` : 'Ajouter une pièce'}
+                          className={`text-sm font-medium whitespace-nowrap ${
+                            docCounts[e.id as string]
+                              ? 'text-green-600 hover:text-green-800'
+                              : 'text-orange-400 hover:text-orange-600'
+                          }`}
+                        >
+                          {docCounts[e.id as string] ? `📎 ${docCounts[e.id as string]}` : '📎'}
+                        </Link>
+                        <Link
+                          href={`/regularisations?${regParams.toString()}`}
+                          title="Régulariser cette écriture"
+                          className="text-indigo-400 hover:text-indigo-700 text-sm"
+                        >
+                          🔄
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                   )
