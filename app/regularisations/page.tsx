@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { PCG_ACCOUNTS } from '@/lib/pcg'
 import { EXERCICES } from '@/lib/exercice'
@@ -135,10 +135,66 @@ export default function RegularisationsPage() {
   const [manualMode, setManualMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const urlParams = useSearchParams()
+
   const showToast = (t: 'success' | 'error', msg: string) => {
     setToast({ type: t, msg })
     setTimeout(() => setToast(null), 5000)
   }
+
+  // Pré-remplissage depuis le journal (param ?from=<id>)
+  useEffect(() => {
+    const fromId = urlParams.get('from')
+    if (!fromId) return
+
+    const montantParam  = urlParams.get('montant') ?? ''
+    const libelleParam  = urlParams.get('libelle') ?? ''
+    const debitParam    = urlParams.get('debit') ?? ''
+    const creditParam   = urlParams.get('credit') ?? ''
+    const dateParam     = urlParams.get('date') ?? ''
+
+    // Détection automatique du type
+    let detectedType: RegType | null = null
+    let detectedCompteReg = ''
+    if (creditParam === '512000' && debitParam.startsWith('6')) {
+      detectedType = 'charge_a_payer'
+      detectedCompteReg = debitParam
+    } else if (debitParam === '512000' && creditParam.startsWith('7')) {
+      detectedType = 'produit_a_recevoir'
+      detectedCompteReg = creditParam
+    }
+
+    // Exercice N = année du paiement - 1 (heuristique : payé en N+1 pour N)
+    const paymentYear = parseInt(dateParam.slice(0, 4), 10)
+    const inferredYear = !isNaN(paymentYear) && paymentYear > 2020
+      ? paymentYear - 1
+      : 2024
+
+    // Construire la proposition depuis l'écriture source
+    const sourceEntry: Ecriture = {
+      id: fromId,
+      date: dateParam,
+      libelle: libelleParam,
+      montant: parseFloat(montantParam),
+      compte_debit: debitParam,
+      compte_credit: creditParam,
+      journal_code: 'BQ',
+    }
+
+    setType(detectedType)
+    setYear(EXERCICES.includes(inferredYear) ? inferredYear : 2024)
+    setCompteReg(detectedCompteReg)
+    setCompteTransitoire(detectedType ? CONFIGS[detectedType].compteTransitoireDefault : '')
+    setMontant(montantParam)
+    setLibelle(libelleParam)
+    setDateE2(dateParam)
+    setProposals([sourceEntry])
+    setSelectedProposal(fromId)
+    setManualMode(false)
+    setShowForm(true)
+    // Si type détecté → aller directement à l'étape 2
+    setStep(detectedType ? 2 : 1)
+  }, [urlParams])
 
   const loadHistory = useCallback(async () => {
     const transitoires = ['408000', '428000', '411000', '441000', '486000', '487000']
@@ -398,7 +454,9 @@ export default function RegularisationsPage() {
                     {proposals.length > 0 && !manualMode && (
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-2">
-                          Propositions trouvées ({proposals.length}) — sélectionnez la correspondance :
+                          {urlParams.get('from')
+                            ? '📌 Écriture sélectionnée depuis le journal :'
+                            : `Propositions trouvées (${proposals.length}) — sélectionnez la correspondance :`}
                         </label>
                         <div className="space-y-2">
                           {proposals.map(p => (

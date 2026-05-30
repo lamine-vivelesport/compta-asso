@@ -147,11 +147,21 @@ export default async function JournalPage({
                   <th className="px-4 py-3 font-semibold text-gray-600">Compte Débit</th>
                   <th className="px-4 py-3 font-semibold text-gray-600">Compte Crédit</th>
                   <th className="px-4 py-3 font-semibold text-gray-600 text-right">Montant</th>
+                  <th className="px-4 py-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((e: Record<string, unknown>) => (
-                  <tr key={e.id as string} className="hover:bg-gray-50">
+                {rows.map((e: Record<string, unknown>) => {
+                  const regParams = new URLSearchParams({
+                    from: e.id as string,
+                    montant: String(e.montant),
+                    libelle: e.libelle as string,
+                    debit: e.compte_debit as string,
+                    credit: e.compte_credit as string,
+                    date: e.date as string,
+                  })
+                  return (
+                  <tr key={e.id as string} className="hover:bg-gray-50 group">
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{e.date as string}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.numero_piece as string}</td>
                     <td className="px-4 py-3">
@@ -173,8 +183,18 @@ export default async function JournalPage({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(Number(e.montant))}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/regularisations?${regParams.toString()}`}
+                        title="Régulariser cette écriture"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-700 text-sm"
+                      >
+                        🔄
+                      </Link>
+                    </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
