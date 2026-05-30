@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { PCG_ACCOUNTS, getPcgLabel } from '@/lib/pcg'
 import { ASSO } from '@/lib/config'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
@@ -85,7 +85,7 @@ export default async function BilanPage({
   const debitLines = (prefixes: string[]): BilanLine[] =>
     Object.entries(soldes)
       .filter(([c]) => prefixes.some(p => c.startsWith(p)))
-      .map(([compte, s]) => ({ compte, libelle: PCG_ACCOUNTS[compte] ?? compte, montant: s }))
+      .map(([compte, s]) => ({ compte, libelle: getPcgLabel(compte), montant: s }))
       .filter(l => l.montant > 0.005)
       .sort((a, b) => a.compte.localeCompare(b.compte))
 
@@ -93,7 +93,7 @@ export default async function BilanPage({
   const creditLines = (prefixes: string[]): BilanLine[] =>
     Object.entries(soldes)
       .filter(([c]) => prefixes.some(p => c.startsWith(p)))
-      .map(([compte, s]) => ({ compte, libelle: PCG_ACCOUNTS[compte] ?? compte, montant: -s }))
+      .map(([compte, s]) => ({ compte, libelle: getPcgLabel(compte), montant: -s }))
       .filter(l => l.montant > 0.005)
       .sort((a, b) => a.compte.localeCompare(b.compte))
 

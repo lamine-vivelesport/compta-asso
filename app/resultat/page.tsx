@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { getPcgLabel } from '@/lib/pcg'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 
@@ -43,14 +43,14 @@ export default async function ResultatPage({
   // Class 6 = charges: solde debit - credit (positive = charge)
   const chargesAccounts = Object.entries(soldes)
     .filter(([compte]) => compte.startsWith('6'))
-    .map(([compte, solde]) => ({ compte, libelle: PCG_ACCOUNTS[compte] ?? compte, montant: solde }))
+    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: solde }))
     .filter(a => Math.abs(a.montant) > 0.001)
     .sort((a, b) => a.compte.localeCompare(b.compte))
 
   // Class 7 = produits: solde credit - debit (negative solde = produit)
   const produitsAccounts = Object.entries(soldes)
     .filter(([compte]) => compte.startsWith('7'))
-    .map(([compte, solde]) => ({ compte, libelle: PCG_ACCOUNTS[compte] ?? compte, montant: -solde }))
+    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: -solde }))
     .filter(a => Math.abs(a.montant) > 0.001)
     .sort((a, b) => a.compte.localeCompare(b.compte))
 

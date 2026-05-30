@@ -241,6 +241,34 @@ export const PCG_ACCOUNTS: Record<string, string> = {
 }
 
 /**
+ * Returns the best label for a PCG account code.
+ * Strategy:
+ *   1. Exact match (ex: '641' → found)
+ *   2. Strip progressively (ex: '641000' → '64100' → '6410' → '641' → found)
+ *   3. Prefix search (ex: '74' → finds '740' → "Subventions d'exploitation")
+ *   4. Fallback: return the code itself
+ */
+export function getPcgLabel(compte: string): string {
+  if (!compte) return compte
+
+  // 1. Exact match
+  if (PCG_ACCOUNTS[compte]) return PCG_ACCOUNTS[compte]
+
+  // 2. Strip trailing characters progressively
+  for (let len = compte.length - 1; len >= 2; len--) {
+    const prefix = compte.slice(0, len)
+    if (PCG_ACCOUNTS[prefix]) return PCG_ACCOUNTS[prefix]
+  }
+
+  // 3. Forward prefix search: find first key that starts with the code
+  const keys = Object.keys(PCG_ACCOUNTS)
+  const match = keys.find(k => k.startsWith(compte))
+  if (match) return PCG_ACCOUNTS[match]
+
+  return compte
+}
+
+/**
  * Searches through PCG accounts and returns top 5 matches based on text similarity
  */
 export function detectAccount(text: string): { numero: string; libelle: string }[] {

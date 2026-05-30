@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { JOURNAL_LABELS } from '@/types/index'
-import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { getPcgLabel } from '@/lib/pcg'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 
@@ -221,15 +221,11 @@ export default async function DashboardPage({
                     <td className="px-4 py-3 text-gray-800 max-w-xs truncate">{e.libelle as string}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">
                       {e.compte_debit as string}
-                      {PCG_ACCOUNTS[e.compte_debit as string] && (
-                        <span className="text-gray-400"> - {PCG_ACCOUNTS[e.compte_debit as string].slice(0, 18)}</span>
-                      )}
+                      <span className="text-gray-400"> - {getPcgLabel(e.compte_debit as string).slice(0, 18)}</span>
                     </td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">
                       {e.compte_credit as string}
-                      {PCG_ACCOUNTS[e.compte_credit as string] && (
-                        <span className="text-gray-400"> - {PCG_ACCOUNTS[e.compte_credit as string].slice(0, 18)}</span>
-                      )}
+                      <span className="text-gray-400"> - {getPcgLabel(e.compte_credit as string).slice(0, 18)}</span>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(Number(e.montant))}</td>
                   </tr>

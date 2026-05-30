@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { JOURNAL_LABELS } from '@/types/index'
-import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { getPcgLabel } from '@/lib/pcg'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 import Link from 'next/link'
@@ -173,15 +173,11 @@ export default async function JournalPage({
                     <td className="px-4 py-3 text-gray-800 max-w-[200px] truncate">{e.libelle as string}</td>
                     <td className="px-4 py-3 text-xs">
                       <span className="font-mono font-semibold text-gray-700">{e.compte_debit as string}</span>
-                      {PCG_ACCOUNTS[e.compte_debit as string] && (
-                        <span className="text-gray-400 ml-1">{PCG_ACCOUNTS[e.compte_debit as string].slice(0, 25)}</span>
-                      )}
+                      <span className="text-gray-400 ml-1">{getPcgLabel(e.compte_debit as string).slice(0, 25)}</span>
                     </td>
                     <td className="px-4 py-3 text-xs">
                       <span className="font-mono font-semibold text-gray-700">{e.compte_credit as string}</span>
-                      {PCG_ACCOUNTS[e.compte_credit as string] && (
-                        <span className="text-gray-400 ml-1">{PCG_ACCOUNTS[e.compte_credit as string].slice(0, 25)}</span>
-                      )}
+                      <span className="text-gray-400 ml-1">{getPcgLabel(e.compte_credit as string).slice(0, 25)}</span>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(Number(e.montant))}</td>
                     <td className="px-4 py-3">

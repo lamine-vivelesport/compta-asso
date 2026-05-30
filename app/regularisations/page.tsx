@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { PCG_ACCOUNTS } from '@/lib/pcg'
+import { PCG_ACCOUNTS, getPcgLabel } from '@/lib/pcg'
 import { DEFAULT_EXERCICES } from '@/lib/exercice'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -400,8 +400,8 @@ export default function RegularisationsPage() {
                       <input value={compteReg} onChange={e => setCompteReg(e.target.value)}
                         list="pcg-list" placeholder={cfg!.compteRegPrefix === '6' ? '641000, 604000, 626000…' : '741000, 756000…'}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                      {compteReg && PCG_ACCOUNTS[compteReg] && (
-                        <p className="text-xs text-indigo-600 mt-0.5">{PCG_ACCOUNTS[compteReg]}</p>
+                      {compteReg && getPcgLabel(compteReg) !== compteReg && (
+                        <p className="text-xs text-indigo-600 mt-0.5">{getPcgLabel(compteReg)}</p>
                       )}
                       <datalist id="pcg-list">
                         {Object.entries(PCG_ACCOUNTS)
@@ -531,8 +531,8 @@ export default function RegularisationsPage() {
                   <div className="grid grid-cols-4 gap-2 px-3 py-3">
                     <div><span className="text-gray-400 block">Date</span><span className="font-medium">{preview.e1.date}</span></div>
                     <div><span className="text-gray-400 block">Journal</span><span className="font-medium">OD</span></div>
-                    <div><span className="text-gray-400 block">Débit</span><span className="font-mono text-indigo-700">{preview.e1.debit}</span><span className="block text-gray-500 truncate">{PCG_ACCOUNTS[preview.e1.debit] ?? ''}</span></div>
-                    <div><span className="text-gray-400 block">Crédit</span><span className="font-mono text-indigo-700">{preview.e1.credit}</span><span className="block text-gray-500 truncate">{PCG_ACCOUNTS[preview.e1.credit] ?? ''}</span></div>
+                    <div><span className="text-gray-400 block">Débit</span><span className="font-mono text-indigo-700">{preview.e1.debit}</span><span className="block text-gray-500 truncate">{getPcgLabel(preview.e1.debit)}</span></div>
+                    <div><span className="text-gray-400 block">Crédit</span><span className="font-mono text-indigo-700">{preview.e1.credit}</span><span className="block text-gray-500 truncate">{getPcgLabel(preview.e1.credit)}</span></div>
                   </div>
                   <div className="bg-gray-50 px-3 py-2 flex justify-between">
                     <span className="text-gray-600">{libelle}</span>
@@ -550,8 +550,8 @@ export default function RegularisationsPage() {
                   <div className="grid grid-cols-4 gap-2 px-3 py-3">
                     <div><span className="text-gray-400 block">Date</span><span className="font-medium">{preview.e2.modify ? proposals.find(p => p.id === selectedProposal)?.date : dateE2}</span></div>
                     <div><span className="text-gray-400 block">Journal</span><span className="font-medium">{cfg.hasBankLink ? 'BQ' : 'OD'}</span></div>
-                    <div><span className="text-gray-400 block">Débit</span><span className="font-mono text-indigo-700">{preview.e2.debit}</span><span className="block text-gray-500 truncate">{PCG_ACCOUNTS[preview.e2.debit] ?? ''}</span></div>
-                    <div><span className="text-gray-400 block">Crédit</span><span className="font-mono text-indigo-700">{preview.e2.credit}</span><span className="block text-gray-500 truncate">{PCG_ACCOUNTS[preview.e2.credit] ?? ''}</span></div>
+                    <div><span className="text-gray-400 block">Débit</span><span className="font-mono text-indigo-700">{preview.e2.debit}</span><span className="block text-gray-500 truncate">{getPcgLabel(preview.e2.debit)}</span></div>
+                    <div><span className="text-gray-400 block">Crédit</span><span className="font-mono text-indigo-700">{preview.e2.credit}</span><span className="block text-gray-500 truncate">{getPcgLabel(preview.e2.credit)}</span></div>
                   </div>
                   <div className="bg-gray-50 px-3 py-2 flex justify-between">
                     <span className="text-gray-600">{libelle}</span>
@@ -601,11 +601,11 @@ export default function RegularisationsPage() {
                     <td className="px-4 py-2.5 text-gray-800 max-w-xs truncate">{e.libelle}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
                       {e.compte_debit}
-                      {PCG_ACCOUNTS[e.compte_debit] && <span className="text-gray-400"> — {PCG_ACCOUNTS[e.compte_debit].slice(0, 22)}</span>}
+                      <span className="text-gray-400"> — {getPcgLabel(e.compte_debit).slice(0, 22)}</span>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
                       {e.compte_credit}
-                      {PCG_ACCOUNTS[e.compte_credit] && <span className="text-gray-400"> — {PCG_ACCOUNTS[e.compte_credit].slice(0, 22)}</span>}
+                      <span className="text-gray-400"> — {getPcgLabel(e.compte_credit).slice(0, 22)}</span>
                     </td>
                     <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{fmt(Number(e.montant))}</td>
                   </tr>
