@@ -104,6 +104,7 @@ interface Ecriture {
   date: string
   libelle: string
   montant: number
+  numero_piece?: string
   compte_debit: string
   compte_credit: string
   journal_code: string
@@ -255,39 +256,49 @@ export default function RegularisationsPage() {
     try {
       const dateE1 = `${year}-12-31`
       const m = parseFloat(montant)
-
-      const ecriture1 = {
-        date: dateE1,
-        journal_code: 'OD',
-        libelle: `[RÉG] ${libelle}`,
-        compte_debit: cfg.e1Debit(compteReg, compteTransitoire),
-        compte_credit: cfg.e1Credit(compteReg, compteTransitoire),
-        montant: m,
-        numero_piece: `REG-${year}-${Date.now().toString().slice(-6)}`,
-      }
+      const ts = Date.now().toString().slice(-8)
 
       if (selectedProposal && !manualMode) {
-        // Modifier l'écriture existante + créer l'écriture 1
-        const newDebit = cfg.e2Debit(compteReg, compteTransitoire)
-        const newCredit = cfg.e2Credit(compteReg, compteTransitoire)
+        // Mode lié : modifier l'écriture existante + créer l'écriture OD
+        // On stocke dans numero_piece les infos pour pouvoir annuler :
+        // REG-{year}-{ts}|L:{originalId}:{origDebit}:{origCredit}
+        const originalEntry = proposals.find(p => p.id === selectedProposal)
+        const origDebit = originalEntry?.compte_debit ?? ''
+        const origCredit = originalEntry?.compte_credit ?? ''
+        const numeroPiece = `REG-${year}-${ts}|L:${selectedProposal}:${origDebit}:${origCredit}`
+
+        const ecriture1 = {
+          date: dateE1, journal_code: 'OD',
+          libelle: `[RÉG] ${libelle}`,
+          compte_debit: cfg.e1Debit(compteReg, compteTransitoire),
+          compte_credit: cfg.e1Credit(compteReg, compteTransitoire),
+          montant: m, numero_piece: numeroPiece,
+        }
         const { error: e1 } = await supabase.from('ecritures').insert(ecriture1)
         if (e1) throw e1
         const { error: e2 } = await supabase.from('ecritures').update({
-          compte_debit: newDebit,
-          compte_credit: newCredit,
-          libelle: `[RÉG] ${proposals.find(p => p.id === selectedProposal)?.libelle ?? ''}`,
+          compte_debit: cfg.e2Debit(compteReg, compteTransitoire),
+          compte_credit: cfg.e2Credit(compteReg, compteTransitoire),
+          libelle: `[RÉG] ${originalEntry?.libelle ?? libelle}`,
         }).eq('id', selectedProposal)
         if (e2) throw e2
       } else {
-        // Créer les 2 écritures
+        // Mode pair (manuel ou extourne) : 2 nouvelles écritures avec même référence
+        // REG-{year}-{ts}|P  →  les 2 ont la même référence, on peut les retrouver ensemble
+        const numeroPiece = `REG-${year}-${ts}|P`
+        const ecriture1 = {
+          date: dateE1, journal_code: 'OD',
+          libelle: `[RÉG] ${libelle}`,
+          compte_debit: cfg.e1Debit(compteReg, compteTransitoire),
+          compte_credit: cfg.e1Credit(compteReg, compteTransitoire),
+          montant: m, numero_piece: numeroPiece,
+        }
         const ecriture2 = {
-          date: dateE2,
-          journal_code: cfg.hasBankLink ? 'BQ' : 'OD',
+          date: dateE2, journal_code: cfg.hasBankLink ? 'BQ' : 'OD',
           libelle: `[RÉG] ${libelle}`,
           compte_debit: cfg.e2Debit(compteReg, compteTransitoire),
           compte_credit: cfg.e2Credit(compteReg, compteTransitoire),
-          montant: m,
-          numero_piece: `REG-${year}-${Date.now().toString().slice(-6)}`,
+          montant: m, numero_piece: numeroPiece,
         }
         const { error } = await supabase.from('ecritures').insert([ecriture1, ecriture2])
         if (error) throw error
@@ -300,6 +311,45 @@ export default function RegularisationsPage() {
       showToast('error', `Erreur : ${e instanceof Error ? e.message : JSON.stringify(e)}`)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // ─── Annulation d'une régularisation ────────────────────────────────────────
+
+  const handleAnnuler = async (entry: Ecriture) => {
+    if (!confirm(`Annuler la régularisation "${entry.libelle.replace('[RÉG] ', '')}" ?\n\nLes écritures créées seront supprimées et les comptes restaurés.`)) return
+
+    try {
+      const parts = (entry.numero_piece ?? '').split('|')
+      const mode = parts[1] ?? ''
+
+      if (mode.startsWith('L:')) {
+        // Mode lié : supprimer l'OD + restaurer l'écriture originale
+        const [, originalId, origDebit, origCredit] = mode.split(':')
+        const { error: delErr } = await supabase.from('ecritures').delete().eq('id', entry.id)
+        if (delErr) throw delErr
+        const origLibelle = entry.libelle.replace(/^\[RÉG\] /, '')
+        const { error: restErr } = await supabase.from('ecritures').update({
+          compte_debit: origDebit,
+          compte_credit: origCredit,
+          libelle: origLibelle,
+        }).eq('id', originalId)
+        if (restErr) throw restErr
+      } else if (mode === 'P') {
+        // Mode pair : supprimer les 2 écritures créées ensemble
+        const { error } = await supabase.from('ecritures')
+          .delete()
+          .eq('numero_piece', entry.numero_piece)
+        if (error) throw error
+      } else {
+        // Ancienne régularisation sans marqueur : supprimer uniquement cette écriture
+        await supabase.from('ecritures').delete().eq('id', entry.id)
+      }
+
+      showToast('success', 'Régularisation annulée avec succès.')
+      await loadHistory()
+    } catch (e) {
+      showToast('error', `Erreur : ${e instanceof Error ? e.message : JSON.stringify(e)}`)
     }
   }
 
@@ -578,7 +628,9 @@ export default function RegularisationsPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-700">Écritures de régularisation existantes</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Comptes 408, 411, 428, 441, 486, 487</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Les lignes avec 🔴 ont été créées par cet outil et peuvent être annulées.
+          </p>
         </div>
         {history.length === 0 ? (
           <p className="px-6 py-8 text-gray-400 text-sm text-center">Aucune régularisation enregistrée</p>
@@ -592,24 +644,46 @@ export default function RegularisationsPage() {
                   <th className="px-4 py-3 font-semibold text-gray-600">Débit</th>
                   <th className="px-4 py-3 font-semibold text-gray-600">Crédit</th>
                   <th className="px-4 py-3 font-semibold text-gray-600 text-right">Montant</th>
+                  <th className="px-4 py-3 w-24"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {history.map(e => (
-                  <tr key={e.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{e.date}</td>
-                    <td className="px-4 py-2.5 text-gray-800 max-w-xs truncate">{e.libelle}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
-                      {e.compte_debit}
-                      <span className="text-gray-400"> — {getPcgLabel(e.compte_debit).slice(0, 22)}</span>
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
-                      {e.compte_credit}
-                      <span className="text-gray-400"> — {getPcgLabel(e.compte_credit).slice(0, 22)}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{fmt(Number(e.montant))}</td>
-                  </tr>
-                ))}
+                {history.map(e => {
+                  const isToolEntry = e.numero_piece?.startsWith('REG-')
+                  return (
+                    <tr key={e.id} className="hover:bg-gray-50 group">
+                      <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{e.date}</td>
+                      <td className="px-4 py-2.5 max-w-xs">
+                        <div className="flex items-center gap-1.5">
+                          {isToolEntry && <span className="text-red-400 shrink-0 text-xs">🔴</span>}
+                          <span className="text-gray-800 truncate">{e.libelle}</span>
+                        </div>
+                        {isToolEntry && (
+                          <span className="text-xs text-gray-400 font-mono">{e.numero_piece?.split('|')[0]}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
+                        {e.compte_debit}
+                        <span className="text-gray-400"> — {getPcgLabel(e.compte_debit).slice(0, 20)}</span>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-indigo-700">
+                        {e.compte_credit}
+                        <span className="text-gray-400"> — {getPcgLabel(e.compte_credit).slice(0, 20)}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{fmt(Number(e.montant))}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isToolEntry && (
+                          <button
+                            onClick={() => handleAnnuler(e)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded-lg whitespace-nowrap"
+                          >
+                            Annuler
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
