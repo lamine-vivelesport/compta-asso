@@ -11,6 +11,7 @@ const navLinks = [
   { href: '/journal', label: 'Journal', icon: '📒' },
   { href: '/resultat', label: 'Compte de résultat', icon: '📈' },
   { href: '/bilan', label: 'Bilan', icon: '⚖️' },
+  { href: '/grand-livre', label: 'Grand Livre', icon: '📖' },
   { href: '/regularisations', label: 'Régularisations', icon: '🔄' },
   { href: '/documents', label: 'Pièces justificatives', icon: '📎' },
   { href: '/import', label: 'Import CSV', icon: '📥' },
