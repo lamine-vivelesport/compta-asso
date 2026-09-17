@@ -238,6 +238,20 @@ export const PCG_ACCOUNTS: Record<string, string> = {
   '791': 'Transferts de charges d\'exploitation',
   '796': 'Transferts de charges financières',
   '797': 'Transferts de charges exceptionnelles',
+
+  // Classe 8 - Comptes spéciaux
+  '860': 'Emplois des contributions volontaires en nature',
+  '870': 'Contributions volontaires en nature',
+  '890': 'Bilan d\'ouverture',
+
+  // Comptes détaillés utilisés par l'association (plan de reprise 2014-2026)
+  '167': 'Emprunts et dettes assortis de conditions particulières',
+  '512000': 'Banque - Compte courant',
+  '512100': 'Banque - Livret A Associations',
+  '218300': 'Matériel de bureau et informatique',
+  '281830': 'Amortissements du matériel de bureau et informatique',
+  '681120': 'Dotations aux amortissements des immobilisations corporelles',
+  '748000': 'Autres subventions d\'exploitation (fonds de solidarité)',
 }
 
 /**

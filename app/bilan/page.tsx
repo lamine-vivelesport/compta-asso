@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { Suspense } from 'react'
-import { supabase } from '@/lib/supabase'
+import { fetchEcritures, fromCents } from '@/lib/ecritures'
+import { calculerSoldes } from '@/lib/soldes'
 import { PCG_ACCOUNTS, getPcgLabel } from '@/lib/pcg'
 import { ASSO } from '@/lib/config'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
@@ -9,7 +10,9 @@ import YearSelector from '@/components/YearSelector'
 import ExportButton from './ExportButton'
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+  // Arrondi au centime puis normalisation du zéro négatif (évite « -0,00 € »)
+  const v = Math.round(n * 100) / 100
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v === 0 ? 0 : v)
 }
 
 interface BilanLine { compte: string; libelle: string; montant: number }
@@ -62,24 +65,13 @@ export default async function BilanPage({
   const { from, to } = yearRange(year)
   const exercices = await getExercices()
 
-  const { data, error } = await supabase
-    .from('ecritures')
-    .select('compte_debit, compte_credit, montant')
-    .gte('date', from)
-    .lte('date', to)
-
-  const rows = data ?? []
+  const { data: rows, error } = await fetchEcritures('date, compte_debit, compte_credit, montant', { from, to })
   const dateGeneration = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
 
-  // Calcul des soldes : débit = +, crédit = -
-  const soldes: Record<string, number> = {}
-  for (const e of rows) {
-    const d = e.compte_debit as string
-    const c = e.compte_credit as string
-    const m = Number(e.montant)
-    soldes[d] = (soldes[d] ?? 0) + m
-    soldes[c] = (soldes[c] ?? 0) - m
-  }
+  // Soldes en euros calculés à partir de centimes entiers : débit = +, crédit = -
+  const soldes: Record<string, number> = Object.fromEntries(
+    Object.entries(calculerSoldes(rows)).map(([compte, cents]) => [compte, fromCents(cents)]),
+  )
 
   // Lignes avec solde débiteur (actif)
   const debitLines = (prefixes: string[]): BilanLine[] =>

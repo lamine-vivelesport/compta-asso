@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchEcritures, validerEcriture } from '@/lib/ecritures'
 
 interface CsvRow { [key: string]: string }
 
@@ -23,6 +24,14 @@ function normalizeDate(d: string): string {
   const m = d.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
   if (m) return `${m[3]}-${m[2]}-${m[1]}`
   return d
+}
+
+/** Clé de doublon : année + n° de pièce si présent, sinon date + libellé + montant. */
+function cleDoublon(r: { date: string; numero_piece: string; libelle: string; montant: string | number }): string {
+  const iso = normalizeDate(String(r.date))
+  const piece = String(r.numero_piece ?? '').trim()
+  if (piece) return `P|${iso.slice(0, 4)}|${piece}`
+  return `L|${iso}|${r.libelle}|${Math.round(Number(String(r.montant).replace(',', '.')) * 100)}`
 }
 
 function parseCsv(text: string): { headers: string[]; rows: CsvRow[] } {
@@ -79,6 +88,7 @@ export default function ImportPage() {
   const [duplicates, setDuplicates] = useState<MappedRow[]>([])
   const [pendingRows, setPendingRows] = useState<MappedRow[]>([])
   const [awaitingConfirm, setAwaitingConfirm] = useState(false)
+  const [invalides, setInvalides] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -122,7 +132,7 @@ export default function ImportPage() {
     for (let i = 0; i < rows.length; i += BATCH) {
       const batch = rows.slice(i, i + BATCH).map(r => ({
         date: normalizeDate(r.date),
-        numero_piece: r.numero_piece || '',
+        numero_piece: (r.numero_piece || '').trim(),
         journal_code: ['AC', 'VE', 'BQ', 'CA', 'OD'].includes(r.journal_code) ? r.journal_code : 'OD',
         libelle: r.libelle,
         compte_debit: r.compte_debit,
@@ -147,30 +157,45 @@ export default function ImportPage() {
   }
 
   const handleImport = async () => {
+    setInvalides([])
     const mapped = getMappedRows()
     const valid = mapped.filter(r => r.date && r.libelle && r.compte_debit && r.compte_credit && r.montant)
     if (valid.length === 0) { showToast('error', 'Aucune ligne valide. Vérifiez le mapping.'); return }
 
-    // Vérification des doublons
-    setImporting(true)
-    const dates = valid.map(r => normalizeDate(r.date)).sort()
-    const { data: existing } = await supabase
-      .from('ecritures')
-      .select('date, numero_piece, libelle, montant')
-      .gte('date', dates[0])
-      .lte('date', dates[dates.length - 1])
-    setImporting(false)
-
-    const found = valid.filter(row =>
-      existing?.some(e => {
-        const isoDate = normalizeDate(row.date)
-        if (row.numero_piece && e.numero_piece)
-          return e.date === isoDate && e.numero_piece === row.numero_piece
-        return e.date === isoDate &&
-          e.libelle === row.libelle &&
-          Math.abs(Number(e.montant) - parseFloat(row.montant.replace(',', '.'))) < 0.01
+    // Contrôles de structure : toute ligne invalide bloque l'import
+    const erreurs: string[] = []
+    const cles = new Map<string, number>()
+    mapped.forEach((r, i) => {
+      if (!valid.includes(r)) return erreurs.push(`Ligne ${i + 2} : champ obligatoire manquant`)
+      const pb = validerEcriture({
+        ...r,
+        date: normalizeDate(r.date),
+        journal_code: ['AC', 'VE', 'BQ', 'CA', 'OD'].includes(r.journal_code) ? r.journal_code : 'OD',
       })
+      if (pb) return erreurs.push(`Ligne ${i + 2} : ${pb}`)
+      const cle = cleDoublon(r)
+      if (r.numero_piece.trim() && cles.has(cle))
+        return erreurs.push(`Ligne ${i + 2} : pièce « ${r.numero_piece.trim()} » déjà présente ligne ${cles.get(cle)} pour la même année`)
+      cles.set(cle, i + 2)
+    })
+    if (erreurs.length > 0) {
+      setInvalides(erreurs)
+      showToast('error', `${erreurs.length} ligne(s) invalide(s) — import bloqué.`)
+      return
+    }
+
+    // Vérification des doublons avec la base, sur les années complètes concernées
+    setImporting(true)
+    const annees = valid.map(r => normalizeDate(r.date).slice(0, 4)).sort()
+    const { data: existing, error } = await fetchEcritures<{ date: string; numero_piece: string; libelle: string; montant: number }>(
+      'date, numero_piece, libelle, montant',
+      { from: `${annees[0]}-01-01`, to: `${annees[annees.length - 1]}-12-31` },
     )
+    setImporting(false)
+    if (error) { showToast('error', `Lecture des écritures existantes impossible : ${error}`); return }
+
+    const enBase = new Set(existing.map(cleDoublon))
+    const found = valid.filter(row => enBase.has(cleDoublon(row)))
 
     if (found.length > 0) {
       setDuplicates(found)
@@ -335,9 +360,7 @@ export default function ImportPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => doInsert(pendingRows.filter(r => !duplicates.some(d =>
-                    d.date === r.date && d.libelle === r.libelle && d.montant === r.montant
-                  )))}
+                  onClick={() => doInsert(pendingRows.filter(r => !duplicates.includes(r)))}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
                 >
                   Ignorer les doublons — importer les {pendingRows.length - duplicates.length} autre(s)
@@ -355,6 +378,17 @@ export default function ImportPage() {
                   Annuler
                 </button>
               </div>
+            </div>
+          )}
+
+          {invalides.length > 0 && (
+            <div className="mb-4 p-4 rounded-xl border-2 border-red-300 bg-red-50">
+              <p className="font-bold text-red-800 mb-2">
+                {invalides.length} ligne(s) invalide(s) — corrigez le fichier avant d&apos;importer
+              </p>
+              <ul className="text-xs text-red-700 space-y-0.5 max-h-48 overflow-y-auto font-mono">
+                {invalides.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
             </div>
           )}
 

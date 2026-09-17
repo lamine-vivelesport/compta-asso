@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { detectAccount, PCG_ACCOUNTS } from '@/lib/pcg'
+import { detectAccount, getPcgLabel } from '@/lib/pcg'
+import { validerEcriture } from '@/lib/ecritures'
 import { JOURNAL_LABELS } from '@/types/index'
 
 interface AccountSuggestion {
@@ -30,7 +31,8 @@ function AccountInput({
   }
 
   const select = (s: AccountSuggestion) => {
-    onChange(s.numero)
+    // Les comptes sont saisis sur 6 chiffres (512 → 512000)
+    onChange(s.numero.padEnd(6, '0'))
     setOpen(false)
   }
 
@@ -43,11 +45,11 @@ function AccountInput({
         onChange={e => handleChange(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onFocus={() => value && suggestions.length > 0 && setOpen(true)}
-        placeholder="ex: 512 ou Banque"
+        placeholder="ex: 512000 ou Banque"
         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
       />
-      {value && PCG_ACCOUNTS[value] && (
-        <p className="text-xs text-indigo-600 mt-1">{PCG_ACCOUNTS[value]}</p>
+      {/^\d{6}$/.test(value) && getPcgLabel(value) !== value && (
+        <p className="text-xs text-indigo-600 mt-1">{getPcgLabel(value)}</p>
       )}
       {open && suggestions.length > 0 && (
         <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
@@ -98,16 +100,32 @@ export default function SaisiePage() {
       showToast('error', 'Veuillez remplir tous les champs obligatoires.')
       return
     }
-    const montant = parseFloat(form.montant)
-    if (isNaN(montant) || montant <= 0) {
-      showToast('error', 'Le montant doit être un nombre positif.')
+    const invalide = validerEcriture(form)
+    if (invalide) {
+      showToast('error', `Écriture refusée : ${invalide}.`)
       return
     }
+    const montant = parseFloat(form.montant)
 
     setLoading(true)
+    if (form.numero_piece.trim()) {
+      const annee = form.date.slice(0, 4)
+      const { data: doublon } = await supabase
+        .from('ecritures')
+        .select('id')
+        .eq('numero_piece', form.numero_piece.trim())
+        .gte('date', `${annee}-01-01`)
+        .lte('date', `${annee}-12-31`)
+        .limit(1)
+      if (doublon?.length) {
+        setLoading(false)
+        showToast('error', `La pièce « ${form.numero_piece.trim()} » existe déjà en ${annee}.`)
+        return
+      }
+    }
     const { error } = await supabase.from('ecritures').insert({
       date: form.date,
-      numero_piece: form.numero_piece,
+      numero_piece: form.numero_piece.trim(),
       journal_code: form.journal_code,
       libelle: form.libelle,
       compte_debit: form.compte_debit,

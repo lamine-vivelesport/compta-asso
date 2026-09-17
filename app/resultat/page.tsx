@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { Suspense } from 'react'
-import { supabase } from '@/lib/supabase'
+import { fetchEcritures, fromCents } from '@/lib/ecritures'
+import { calculerSoldes, totauxResultat } from '@/lib/soldes'
 import { getPcgLabel } from '@/lib/pcg'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
@@ -20,43 +21,25 @@ export default async function ResultatPage({
   const { from, to } = yearRange(year)
   const exercices = await getExercices()
 
-  const { data, error } = await supabase
-    .from('ecritures')
-    .select('compte_debit, compte_credit, montant')
-    .gte('date', from)
-    .lte('date', to)
-
-  const rows = data ?? []
-
-  // Aggregate by account
-  const soldes: Record<string, number> = {}
-
-  for (const e of rows) {
-    const debit = e.compte_debit as string
-    const credit = e.compte_credit as string
-    const montant = Number(e.montant)
-
-    soldes[debit] = (soldes[debit] ?? 0) + montant
-    soldes[credit] = (soldes[credit] ?? 0) - montant
-  }
+  const { data: rows, error } = await fetchEcritures('date, compte_debit, compte_credit, montant', { from, to })
+  const soldes = calculerSoldes(rows)
 
   // Class 6 = charges: solde debit - credit (positive = charge)
   const chargesAccounts = Object.entries(soldes)
-    .filter(([compte]) => compte.startsWith('6'))
-    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: solde }))
-    .filter(a => Math.abs(a.montant) > 0.001)
+    .filter(([compte, solde]) => compte.startsWith('6') && solde !== 0)
+    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: fromCents(solde) }))
     .sort((a, b) => a.compte.localeCompare(b.compte))
 
   // Class 7 = produits: solde credit - debit (negative solde = produit)
   const produitsAccounts = Object.entries(soldes)
-    .filter(([compte]) => compte.startsWith('7'))
-    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: -solde }))
-    .filter(a => Math.abs(a.montant) > 0.001)
+    .filter(([compte, solde]) => compte.startsWith('7') && solde !== 0)
+    .map(([compte, solde]) => ({ compte, libelle: getPcgLabel(compte), montant: fromCents(-solde) }))
     .sort((a, b) => a.compte.localeCompare(b.compte))
 
-  const totalCharges = chargesAccounts.reduce((s, a) => s + a.montant, 0)
-  const totalProduits = produitsAccounts.reduce((s, a) => s + a.montant, 0)
-  const resultatNet = totalProduits - totalCharges
+  const totaux = totauxResultat(soldes)
+  const totalCharges = fromCents(totaux.charges)
+  const totalProduits = fromCents(totaux.produits)
+  const resultatNet = fromCents(totaux.resultat)
 
   return (
     <div>

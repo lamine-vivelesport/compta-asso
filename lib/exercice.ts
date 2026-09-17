@@ -12,24 +12,22 @@ export function parseYear(raw: string | undefined): number {
   return n > 2000 && n < 2100 ? n : new Date().getFullYear()
 }
 
-/** Fetch all years that have at least one écriture in the DB. */
+/** All years between the first and last écriture in the DB, most recent first. */
 export async function getExercices(): Promise<number[]> {
-  const { data } = await supabase
-    .from('ecritures')
-    .select('date')
-    .order('date', { ascending: false })
+  // Only the two boundary dates are read: fetching every row hits the 1 000-row cap
+  const [{ data: first }, { data: last }] = await Promise.all([
+    supabase.from('ecritures').select('date').order('date', { ascending: true }).limit(1),
+    supabase.from('ecritures').select('date').order('date', { ascending: false }).limit(1),
+  ])
 
-  if (!data || data.length === 0) return DEFAULT_EXERCICES
+  if (!first?.length || !last?.length) return DEFAULT_EXERCICES
 
-  const years = [...new Set(
-    data
-      .map((e: { date: string }) => parseInt(e.date.slice(0, 4), 10))
-      .filter((y: number) => !isNaN(y) && y > 2000 && y < 2100)
-  )].sort((a, b) => b - a) as number[]
-
-  // Always include current year even if no entries yet
   const currentYear = new Date().getFullYear()
-  if (!years.includes(currentYear)) years.unshift(currentYear)
+  const minYear = parseInt(first[0].date.slice(0, 4), 10)
+  // Always include current year even if no entries yet
+  const maxYear = Math.max(parseInt(last[0].date.slice(0, 4), 10), currentYear)
 
+  const years: number[] = []
+  for (let y = maxYear; y >= minYear; y--) years.push(y)
   return years
 }
