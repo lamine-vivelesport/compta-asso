@@ -2,17 +2,13 @@ export const dynamic = 'force-dynamic'
 
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import { JOURNAL_LABELS } from '@/types/index'
-import { getPcgLabel } from '@/lib/pcg'
+import { JOURNAL_LABELS, type Ecriture } from '@/types/index'
+import JournalTable from './JournalTable'
 import { parseYear, yearRange, getExercices } from '@/lib/exercice'
 import YearSelector from '@/components/YearSelector'
 import Link from 'next/link'
 
 const PAGE_SIZE = 20
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
-}
 
 interface SearchParams {
   annee?: string
@@ -20,6 +16,8 @@ interface SearchParams {
   from?: string
   to?: string
   page?: string
+  q?: string
+  compte?: string
 }
 
 export default async function JournalPage({
@@ -32,6 +30,9 @@ export default async function JournalPage({
   const { from: yearFrom, to: yearTo } = yearRange(year)
   const exercices = await getExercices()
   const journalFilter = params.journal ?? ''
+  const q = (params.q ?? '').trim()
+  // Filtre compte : 6 chiffres attendus, sinon ignoré (la valeur part dans la requête)
+  const compteFilter = /^[1-8]\d{5}$/.test(params.compte ?? '') ? (params.compte as string) : ''
   const fromDate = params.from ?? yearFrom
   const toDate = params.to ?? yearTo
   const page = Math.max(1, parseInt(params.page ?? '1', 10))
@@ -45,14 +46,16 @@ export default async function JournalPage({
     .range(offset, offset + PAGE_SIZE - 1)
 
   if (journalFilter) query = query.eq('journal_code', journalFilter)
+  if (q) query = query.ilike('libelle', `%${q}%`)
+  if (compteFilter) query = query.or(`compte_debit.eq.${compteFilter},compte_credit.eq.${compteFilter}`)
   query = query.gte('date', fromDate).lte('date', toDate)
 
   const { data, count, error } = await query
-  const rows = data ?? []
+  const rows = (data ?? []) as unknown as Ecriture[]
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
   // Document counts for visible rows
-  const rowIds = rows.map((e: Record<string, unknown>) => e.id as string)
+  const rowIds = rows.map(e => e.id)
   const { data: docData } = rowIds.length > 0
     ? await supabase.from('documents').select('ecriture_id').in('ecriture_id', rowIds)
     : { data: [] }
@@ -67,6 +70,8 @@ export default async function JournalPage({
     if (journalFilter) p.set('journal', journalFilter)
     if (fromDate) p.set('from', fromDate)
     if (toDate) p.set('to', toDate)
+    if (q) p.set('q', q)
+    if (compteFilter) p.set('compte', compteFilter)
     p.set('page', String(page))
     Object.entries(overrides).forEach(([k, v]) => v ? p.set(k, v) : p.delete(k))
     return `/journal?${p.toString()}`
@@ -115,13 +120,35 @@ export default async function JournalPage({
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Libellé contient</label>
+            <input
+              type="text"
+              name="q"
+              defaultValue={q}
+              placeholder="ex: Cheque n"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Compte</label>
+            <input
+              type="text"
+              name="compte"
+              defaultValue={compteFilter}
+              placeholder="ex: 606000"
+              inputMode="numeric"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <input type="hidden" name="annee" value={year} />
           <button
             type="submit"
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
           >
             Filtrer
           </button>
-          {(journalFilter || fromDate || toDate) && (
+          {(journalFilter || fromDate || toDate || q || compteFilter) && (
             <Link
               href="/journal"
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors"
@@ -147,76 +174,8 @@ export default async function JournalPage({
         {rows.length === 0 ? (
           <p className="px-6 py-12 text-gray-400 text-sm text-center">Aucune écriture trouvée</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="px-4 py-3 font-semibold text-gray-600">Date</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600">N° Pièce</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600">Journal</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600">Libellé</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600">Compte Débit</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600">Compte Crédit</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600 text-right">Montant</th>
-                  <th className="px-4 py-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.map((e: Record<string, unknown>) => {
-                  const regParams = new URLSearchParams({
-                    from: e.id as string,
-                    montant: String(e.montant),
-                    libelle: e.libelle as string,
-                    debit: e.compte_debit as string,
-                    credit: e.compte_credit as string,
-                    date: e.date as string,
-                  })
-                  return (
-                  <tr key={e.id as string} className="hover:bg-gray-50 group">
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{e.date as string}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.numero_piece as string}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium whitespace-nowrap">
-                        {e.journal_code as string} — {JOURNAL_LABELS[e.journal_code as string]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-800 max-w-[200px] truncate">{e.libelle as string}</td>
-                    <td className="px-4 py-3 text-xs">
-                      <span className="font-mono font-semibold text-gray-700">{e.compte_debit as string}</span>
-                      <span className="text-gray-400 ml-1">{getPcgLabel(e.compte_debit as string).slice(0, 25)}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      <span className="font-mono font-semibold text-gray-700">{e.compte_credit as string}</span>
-                      <span className="text-gray-400 ml-1">{getPcgLabel(e.compte_credit as string).slice(0, 25)}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(Number(e.montant))}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link
-                          href={`/documents?annee=${year}&ecriture=${e.id as string}`}
-                          title={docCounts[e.id as string] ? `${docCounts[e.id as string]} pièce(s)` : 'Ajouter une pièce'}
-                          className={`text-sm font-medium whitespace-nowrap ${
-                            docCounts[e.id as string]
-                              ? 'text-green-600 hover:text-green-800'
-                              : 'text-orange-400 hover:text-orange-600'
-                          }`}
-                        >
-                          {docCounts[e.id as string] ? `📎 ${docCounts[e.id as string]}` : '📎'}
-                        </Link>
-                        <Link
-                          href={`/regularisations?${regParams.toString()}`}
-                          title="Régulariser cette écriture"
-                          className="text-indigo-400 hover:text-indigo-700 text-sm"
-                        >
-                          🔄
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="p-4">
+            <JournalTable rows={rows} docCounts={docCounts} year={year} compteFiltre={compteFilter} />
           </div>
         )}
 
